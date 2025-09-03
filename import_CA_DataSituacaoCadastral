@@ -1,0 +1,65 @@
+// ---------------------------------------------------------
+// Preencher CA_DataSituacaoCadastral__c em Contas sem data
+// Base: mapa Código-do-Cliente  -> Data a gravar
+// Campo de data: Account.CA_DataSituacaoCadastral__c
+// ---------------------------------------------------------
+
+// >>> 1) Edite aqui sua lista (código -> data):
+Map<String, Date> codigoParaData = new Map<String, Date>{
+    // Exemplo pedido: conta 6123 com 01/02/1977 (DD/MM/AAAA)
+    '6123' => Date.newInstance(1977, 2, 1)
+
+    // Adicione mais linhas assim:
+    //,'7001' => Date.newInstance(2003, 10, 15)
+    //,'8450' => Date.newInstance(1999, 12, 31)
+};
+
+// Se na sua org o identificador da conta é CA_CodigoCliente__c, mantenha true.
+// Se você prefere buscar por AccountNumber, mude para false.
+Boolean BUSCAR_POR_CODIGO_CLIENTE = true;
+
+// ---------------------------------------------------------
+// Não precisa editar abaixo
+// ---------------------------------------------------------
+Set<String> chaves = new Set<String>(codigoParaData.keySet());
+
+String whereClause;
+if (BUSCAR_POR_CODIGO_CLIENTE) {
+    whereClause = 'CA_CodigoCliente__c IN :chaves';
+} else {
+    whereClause = 'AccountNumber IN :chaves';
+}
+
+List<Account> candidatos = Database.query(
+    'SELECT Id, Name, CA_CodigoCliente__c, AccountNumber, ' +
+    '       CA_DataSituacaoCadastral__c ' +
+    'FROM Account WHERE ' + whereClause
+);
+
+List<Account> paraAtualizar = new List<Account>();
+Map<String, Integer> contagemPorChave = new Map<String, Integer>();
+
+for (Account a : candidatos) {
+    String chave = BUSCAR_POR_CODIGO_CLIENTE ? a.CA_CodigoCliente__c : a.AccountNumber;
+    if (chave == null) continue;
+
+    // Só preenche se estiver vazio
+    if (a.CA_DataSituacaoCadastral__c == null && codigoParaData.containsKey(chave)) {
+        a.CA_DataSituacaoCadastral__c = codigoParaData.get(chave);
+        paraAtualizar.add(a);
+    }
+    contagemPorChave.put(chave, (contagemPorChave.get(chave) == null ? 0 : contagemPorChave.get(chave)) + 1);
+}
+
+// Efetiva a atualização em lote
+if (!paraAtualizar.isEmpty()) {
+    update paraAtualizar;
+}
+
+// Logs úteis
+System.debug('Total encontradas: ' + candidatos.size());
+System.debug('Total atualizadas: ' + paraAtualizar.size());
+for (String k : codigoParaData.keySet()) {
+    System.debug('Chave ' + k + ' -> encontradas=' + (contagemPorChave.get(k) == null ? 0 : contagemPorChave.get(k))
+                + ', data=' + codigoParaData.get(k));
+}
